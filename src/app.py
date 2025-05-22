@@ -2,7 +2,6 @@ import base64
 import hashlib
 import io
 import json
-import logging
 import os
 import re
 import time
@@ -59,16 +58,15 @@ from src.utils.security.safe import run_security_checks, random_string, gen_qr_t
 from src.utils.user_agent.parser import user_agent_info, sanitize_user_agent
 
 global_encoding = 'utf-8'
-
-app = Flask(__name__, template_folder='../templates', static_folder="../static")
+base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+print(f"running at: {base_dir}")
+app = Flask(__name__, template_folder=f'{base_dir}/templates', static_folder=f'{base_dir}/static')
 app.config['CACHE_TYPE'] = 'simple'
 cache = Cache(app)
 app.secret_key = secret_key
 
-base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
 domain, sitename, beian, sys_version, api_host, app_id, app_key, DEFAULT_KEY = get_general_config()
-print("please check information")
+print("sys information")
 print("++++++++++==========================++++++++++")
 print(
     f'\n domain: {domain} \n title: {sitename} \n beian: {beian} \n Version: {sys_version} \n 三方登录api: {api_host} \n')
@@ -129,11 +127,7 @@ app.jinja_env.autoescape = select_autoescape(['html', 'xml'])
 app.jinja_env.add_extension('jinja2.ext.loopcontrols')
 
 # 新增日志处理程序
-log_formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
-file_handler = logging.FileHandler('temp/app.log', encoding=global_encoding)
-file_handler.setFormatter(log_formatter)
-app.logger.addHandler(file_handler)
-app.logger.setLevel(logging.INFO)
+app.logger.info("app.py logging已启动，并使用全局日志配置。")
 
 
 @app.context_processor
