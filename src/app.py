@@ -886,6 +886,9 @@ def api_delete_comment(user_id):
 @app.template_filter('fromjson')
 def json_filter(value):
     """将 JSON 字符串解析为 Python 对象"""
+    # 如果已经是字典直接返回
+    if isinstance(value, dict):
+        return value
     if not isinstance(value, str):
         print(f"Unexpected type for value: {type(value)}. Expected a string.")
         return None
@@ -896,6 +899,26 @@ def json_filter(value):
     except (ValueError, TypeError) as e:
         app.logger.error(f"Error parsing JSON: {e}, Value: {value}")
         return None
+
+
+@app.template_filter('string.split')
+def string_split(value, delimiter=','):
+    """
+    在模板中对字符串进行分割
+    :param value: 要分割的字符串
+    :param delimiter: 分割符，默认为逗号
+    :return: 分割后的列表
+    """
+    if not isinstance(value, str):
+        app.logger.error(f"Unexpected type for value: {type(value)}. Expected a string.")
+        return []
+
+    try:
+        result = value.split(delimiter)
+        return result
+    except Exception as e:
+        app.logger.error(f"Error splitting string: {e}, Value: {value}")
+        return []
 
 
 @app.template_filter('Author')
@@ -1030,8 +1053,11 @@ def api_edit(user_id, aid):
 @jwt_required
 def api_update_article_tags(user_id, aid):
     tags_input = request.get_json().get('tags')
+
+    # 如果 tags_input 不是字符串，尝试将其转换为字符串
     if not isinstance(tags_input, str):
-        return jsonify({'show_edit': 'error', 'message': '标签输入不是字符串'})
+        tags_input = str(tags_input)
+
     tags_input = tags_input.replace("，", ",")
     tags_list = [
         tag.strip() for tag in re.split(",", tags_input, maxsplit=4) if len(tag.strip()) <= 10
