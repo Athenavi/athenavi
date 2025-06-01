@@ -142,7 +142,7 @@
 <!-- 引入 SimpleMDE JS<script src="https://cdn.jsdelivr.net/simplemde/latest/simplemde.min.js"></script> -->
 <script src="https://cdn.jsdelivr.net/npm/vditor/dist/index.min.js"></script>
 <script>
-    const content = JSON.stringify(`{{ edit_html|safe }}`).slice(1, -1);
+    const content = `{{ edit_html|safe }}`;
     const vditor = new Vditor('vditor', {
         height: 600,
         value: content,
