@@ -34,7 +34,6 @@
             transform: translateX(0);
         }
 
-
         .sidebar-header h2 {
             font-size: 1.5rem;
             color: #e94560;
@@ -125,16 +124,13 @@
         }
 
         .sidebar-nav ul ul {
-            margin-left: 20px;
-            display: none;
-        }
-
-        .sidebar-nav li.active > ul {
-            display: flex;
+            margin-left: 20px; /* 添加缩进 */
+            display: flex; /* 确保三级标题直接显示 */
+            flex-direction: column;
         }
 
         .sidebar-nav ul ul li a {
-            padding: 12px 25px 12px 55px;
+            padding: 12px 25px 12px 55px; /* 更改padding以增加缩进 */
             font-size: 0.95rem;
         }
 
@@ -161,6 +157,7 @@
             transform: scale(1.1) rotate(90deg);
             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
         }
+
     </style>
 </head>
 <body class="bg-gray-50 min-h-screen flex flex-col">
