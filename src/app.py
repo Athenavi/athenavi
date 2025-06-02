@@ -44,7 +44,7 @@ from src.media.processing import handle_cover_resize
 from src.other.report import report_add
 from src.other.search import search_handler
 from src.upload.admin_upload import admin_upload_file
-from src.upload.public_upload import handle_user_upload, save_bulk_article_db, process_single_upload
+from src.upload.public_upload import handle_user_upload, save_bulk_article_db, process_single_upload, bulk_content_save
 from src.user.authz.core import secret_key, get_username
 from src.user.authz.decorators import jwt_required, admin_required, origin_required
 from src.user.authz.login import tp_mail_login
@@ -1253,6 +1253,10 @@ def validate_api_key(api_key):
 def upload_bulk(user_id):
     upload_locked = cache.get(f"upload_locked_{user_id}") or False
     if request.method == 'POST':
+        success_path_list = []
+        success_file_list = []  # 存储文件名（不含扩展名）
+        success_titles = []  # 存储用于查询的标题
+
         if upload_locked:
             return jsonify([{"filename": "无法上传", "status": "failed", "message": "上传已被锁定，请稍后再试"}]), 209
 
@@ -1263,49 +1267,86 @@ def upload_bulk(user_id):
 
             files = request.files.getlist('files')
 
-            # Check if the number of files exceeds the limit
+            # 检查文件数量限制
             if len(files) > 50:
                 return jsonify([{"filename": "无法上传", "status": "failed", "message": "最多只能上传50个文件"}]), 400
 
             upload_result = []
-            for file in files:
-                cache.set(f"upload_locked_{user_id}", True, timeout=30)
-                current_file_result = {"filename": file.filename, "status": "", "message": ""}
-                # 直接使用原始文件名
-                original_name = file.filename
+            cache.set(f"upload_locked_{user_id}", True, timeout=30)
 
-                if not original_name.endswith('.md') or original_name.startswith('_') or file.content_length > \
-                        app.config['UPLOAD_LIMIT']:
+            for file in files:
+                current_file_result = {
+                    "filename": file.filename,
+                    "status": "",
+                    "message": ""
+                }
+
+                # 原始文件名处理
+                original_name = file.filename
+                base_name = os.path.splitext(original_name)[0]  # 不含扩展名
+
+                # 验证文件
+                if not original_name.endswith('.md'):
                     current_file_result["status"] = "failed"
-                    current_file_result["message"] = "文件类型或名称不受支持或文件大小超过限制"
+                    current_file_result["message"] = "仅支持.md文件"
                     upload_result.append(current_file_result)
                     continue
 
-                # 确保文件路径支持中文字符
-                file_path = os.path.join("articles", original_name)
+                if original_name.startswith('_'):
+                    current_file_result["status"] = "failed"
+                    current_file_result["message"] = "文件名不能以下划线开头"
+                    upload_result.append(current_file_result)
+                    continue
 
-                # 自动重命名文件
+                if file.content_length > app.config['UPLOAD_LIMIT']:
+                    current_file_result["status"] = "failed"
+                    current_file_result[
+                        "message"] = f"文件大小超过限制 ({app.config['UPLOAD_LIMIT'] // (1024 * 1024)}MB)"
+                    upload_result.append(current_file_result)
+                    continue
+
+                # 创建上传目录
+                upload_dir = "temp/upload"
+                os.makedirs(upload_dir, exist_ok=True)
+                file_path = os.path.join(upload_dir, original_name)
+
+                # 检查文件是否已存在
                 if os.path.exists(file_path):
                     current_file_result["status"] = "failed"
-                    current_file_result["message"] = "存在同名文件！！！"
+                    current_file_result["message"] = "存在同名文件"
                     upload_result.append(current_file_result)
                     continue
 
                 # 保存文件
                 file.save(file_path)
-                if save_bulk_article_db(original_name, user_id):
+
+                # 保存到数据库 (articles表)
+                if save_bulk_article_db(base_name, user_id):  # 使用不含扩展名的名称
                     current_file_result["status"] = "success"
                     current_file_result["message"] = "上传成功"
+
+                    # 添加到成功列表
+                    success_path_list.append(file_path)
+                    success_file_list.append(base_name)  # 存储不含扩展名的名称
+                    success_titles.append(base_name)  # 用于后续查询
                 else:
                     current_file_result["status"] = "failed"
                     current_file_result["message"] = "数据库保存失败"
+
                 upload_result.append(current_file_result)
+
+            # 批量保存内容 (所有文件处理完成后)
+            if success_path_list:
+                if not bulk_content_save(success_path_list, success_titles):
+                    app.logger.error("部分文件内容保存失败")
+                    # 可选：标记失败的文件
 
             return jsonify({'upload_result': upload_result})
 
         except Exception as e:
-            app.logger.error(f"Error in file upload: {e}")
-            return jsonify({'message': 'failed', 'error': str(e)}), 500
+            app.logger.error(f"批量上传错误: {str(e)}", exc_info=True)
+            return jsonify({'message': '上传失败', 'error': str(e)}), 500
+
     tip_message = f"请不要上传超过 {app.config['UPLOAD_LIMIT'] / (1024 * 1024)}MB 的文件"
     return render_template('upload.html', upload_locked=upload_locked, message=tip_message)
 
