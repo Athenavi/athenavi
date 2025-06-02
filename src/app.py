@@ -4,7 +4,6 @@ import io
 import json
 import os
 import re
-import time
 import uuid
 from datetime import timedelta
 from pathlib import Path
@@ -15,7 +14,7 @@ import requests
 from PIL import Image
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, redirect, request, url_for, jsonify, send_file, \
-    make_response, Response
+    make_response
 from flask_caching import Cache
 from jinja2 import select_autoescape, TemplateNotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -24,7 +23,7 @@ from werkzeug.utils import secure_filename
 from src.blog.article.core.content import delete_article, save_article_changes, \
     get_article_content_by_id
 from src.blog.article.core.crud import get_articles_by_owner, delete_db_article, fetch_articles, \
-    get_articles_recycle, get_id_by_title, fetch_articles_content
+    get_articles_recycle
 from src.blog.article.metadata.handlers import get_article_metadata, upsert_article_metadata, upsert_article_content
 from src.blog.article.security.password import update_article_password
 from src.blog.comment import get_comments, create_comment, delete_comment
@@ -146,26 +145,203 @@ def search(user_id):
     return search_handler(user_id, domain, global_encoding, app.config['MAX_CACHE_TIMESTAMP'])
 
 
-@cache.memoize(30)
-@app.route('/blog/api/<article_name>.md', methods=['GET', 'POST'])
-@app.route('/api/<article_name>.md', methods=['GET', 'POST'])
-@origin_required
-def sys_out_file(article_name):
-    blog_id = get_id_by_title(article_name)
-    if not blog_id:
-        return create_response('###文章不可用', 30)
+import threading
+import time
+from collections import defaultdict
+from functools import wraps
+from flask import Response
 
-    blog_content = fetch_articles_content(blog_id)
-    if not blog_content:
-        return create_response('###页面不见了！', 120)
-
-    return create_response(blog_content, 300)
+# 全局计数器和锁
+view_counts = defaultdict(int)
+counter_lock = threading.Lock()
+stop_event = threading.Event()
+PERSIST_INTERVAL = 60  # 每60秒持久化一次
 
 
-def create_response(blog_content, max_age):
-    response = Response(blog_content, mimetype='text/markdown')
+def persist_views():
+    """定时将内存中的浏览量持久化到数据库"""
+    while not stop_event.is_set():
+        time.sleep(PERSIST_INTERVAL)
+
+        try:
+            # 创建计数器快照并清空
+            with counter_lock:
+                if not view_counts:
+                    continue
+
+                counts_snapshot = view_counts.copy()
+                view_counts.clear()
+
+            # 批量更新数据库
+            update_success = False
+            try:
+                with get_db_connection() as db:
+                    with db.cursor() as cursor:
+                        for blog_id, count in counts_snapshot.items():
+                            query = """
+                                    UPDATE `articles`
+                                    SET `views` = `views` + %s
+                                    WHERE `article_id` = %s \
+                                    """
+                            cursor.execute(query, (count, blog_id))
+                        db.commit()
+                        update_success = True
+
+            except Exception as db_error:
+                app.logger.error(
+                    f"Database update failed: {str(db_error)}",
+                    exc_info=True
+                )
+                db.rollback()
+
+            # 如果更新失败，恢复计数器
+            if not update_success:
+                with counter_lock:
+                    for blog_id, count in counts_snapshot.items():
+                        view_counts[blog_id] += count
+
+        except Exception as e:
+            app.logger.error(
+                f"View persistence error: {str(e)}",
+                exc_info=True
+            )
+
+    # 程序关闭时执行最后一次持久化
+    final_persist()
+
+
+def final_persist():
+    """应用关闭时执行最终持久化"""
+    with counter_lock:
+        if not view_counts:
+            return
+
+        counts_snapshot = view_counts.copy()
+        view_counts.clear()
+
+    try:
+        with get_db_connection() as db:
+            with db.cursor() as cursor:
+                for blog_id, count in counts_snapshot.items():
+                    cursor.execute(
+                        "UPDATE `articles` SET `views` = `views` + %s WHERE `article_id` = %s",
+                        (count, blog_id)
+                    )
+                db.commit()
+    except Exception as e:
+        app.logger.error(
+            f"Final persist failed: {str(e)}",
+            exc_info=True
+        )
+
+
+# 启动持久化线程
+persist_thread = threading.Thread(target=persist_views, daemon=True)
+persist_thread.start()
+
+
+@cache.memoize(7200)
+def get_id_by_title(title):
+    """根据标题获取文章ID（带缓存）"""
+    try:
+        with get_db_connection() as db:
+            with db.cursor() as cursor:
+                query = """
+                        SELECT `article_id`
+                        FROM `articles`
+                        WHERE `title` = %s
+                          AND `Hidden` = 0
+                          AND `Status` = 'Published' \
+                        """
+                cursor.execute(query, (title,))
+                result = cursor.fetchone()
+                return result[0] if result else None
+    except Exception as e:
+        app.logger.error(
+            f"Failed to get ID for title '{title}': {str(e)}",
+            exc_info=True
+        )
+        return None
+
+
+def view_filter(func):
+    """浏览量计数装饰器（线程安全）"""
+
+    @wraps(func)
+    def wrapper(article_name, *args, **kwargs):
+        blog_id = get_id_by_title(article_name)
+        if not blog_id:
+            return func(article_name, blog_id=None, *args, **kwargs)
+
+        # 原子性增加计数
+        with counter_lock:
+            view_counts[blog_id] += 1
+
+        return func(article_name, blog_id=blog_id, *args, **kwargs)
+
+    return wrapper
+
+
+def create_response(content, max_age, content_type='text/markdown'):
+    """创建带缓存控制的响应"""
+    response = Response(content, mimetype=content_type)
     response.headers['Cache-Control'] = f'public, max-age={max_age}'
     return response
+
+
+@cache.memoize(300)  # 5分钟缓存
+@app.route('/blog/api/<article_name>.md', methods=['GET'])
+@app.route('/api/<article_name>.md', methods=['GET'])
+@origin_required
+@view_filter
+def get_article_content(article_name, blog_id=None):
+    """
+    获取文章内容和实时浏览量
+    返回格式：
+    <!-- 浏览量: 123 -->
+    文章内容...
+    """
+    if not blog_id:
+        return create_response('# 文章不可用', 30)
+
+    try:
+        with get_db_connection() as db:
+            with db.cursor() as cursor:
+                # 获取内容和当前浏览量
+                query = """
+                        SELECT c.content, a.views
+                        FROM article_content c
+                                 JOIN articles a ON a.article_id = c.aid
+                        WHERE c.aid = %s \
+                        """
+                cursor.execute(query, (blog_id,))
+                result = cursor.fetchone()
+
+                if not result:
+                    return create_response('# 页面不见了！', 120)
+
+                content, views = result
+                # 在内容前添加浏览量注释
+                marked_content = f"<!-- 浏览量: {views} -->\n{content}"
+                return create_response(marked_content, 300)
+
+    except Exception as e:
+        app.logger.error(
+            f"Failed to fetch article {blog_id}: {str(e)}",
+            exc_info=True
+        )
+        return create_response('# 服务暂时不可用', 30)
+
+
+def clear_article_cache(article_name):
+    """清除文章相关缓存"""
+    blog_id = get_id_by_title(article_name)
+    if blog_id:
+        # 清除ID缓存
+        cache.delete_memoized(get_id_by_title, article_name)
+        # 清除内容缓存
+        cache.delete_memoized(get_article_content, article_name)
+        app.logger.info(f"Cleared cache for article: {article_name} (ID: {blog_id})")
 
 
 @app.route('/confirm-password', methods=['GET', 'POST'])

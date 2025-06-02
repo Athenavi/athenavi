@@ -76,34 +76,3 @@ def delete_db_article(user_id, aid):
         return jsonify({'show_edit_code': "deleted"}), 201
     except Exception as e:
         return jsonify({'show_edit_code': 'error', 'message': f'删除文章失败{e}'}), 500
-
-
-def get_id_by_title(title):
-    try:
-        with get_db_connection() as db:
-            with db.cursor() as cursor:
-                query = "SELECT `article_id` FROM `articles` WHERE `title`=%s and `Hidden`=0 and `Status`='Published'"
-                cursor.execute(query, (title,))
-                result = cursor.fetchone()
-                if result:
-                    return result[0]
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        # 更详细的日志记录或错误处理机制
-
-    return None
-
-
-def fetch_articles_content(aid):
-    try:
-        with get_db_connection() as db:
-            with db.cursor() as cursor:
-                query = "SELECT `content` FROM `article_content` WHERE `aid`=%s"
-                cursor.execute(query, (aid,))
-                result = cursor.fetchone()
-                if result:
-                    return result[0]
-    except Exception as e:
-        print(f"An error occurred: {e}")
-        # 更详细的日志记录或错误处理机制
-        return None
