@@ -1,10 +1,8 @@
-import urllib
 from datetime import datetime
 
 from flask import Blueprint, Response, request, render_template, redirect
 
 from src.blog.article.core.content import get_article_content, get_article_titles
-from src.database import get_db_connection
 from src.utils.shortener.links import create_special_url, redirect_to_long_url
 
 website_bp = Blueprint('website', __name__, template_folder='templates')
@@ -25,44 +23,25 @@ def create_website_blueprint(cache_instance, domain, sitename):
     @website_bp.route('/sitemap')
     @cache_instance.memoize(7200)
     def generate_sitemap():
-        db = None
-        try:
-            db = get_db_connection()
-            with db.cursor() as cursor:
-                query = """SELECT Title
-                           FROM `articles`
-                           WHERE `Hidden` = 0
-                             AND `Status` = 'Published'
-                           ORDER BY `article_id` DESC
-                           LIMIT 40"""
-                cursor.execute(query)
-                results = cursor.fetchall()
-                article_titles = [item[0] for item in results]
+        articles, *_ = get_article_titles()
+        xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
 
-                xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n'
-                xml_data += '<urlset xmlns="https://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        for title in articles:
+            article_url = domain + 'blog/' + title
+            article_surl = api_shortlink(article_url)
+            *_, date = get_article_content(title)
 
-                for title in article_titles:
-                    article_url = domain + 'blog/' + title
-                    article_surl = api_shortlink(article_url)
-                    *_, date = get_article_content(title)
+            xml_data += '<url>\n'
+            xml_data += f'\t<loc>{article_surl}</loc>\n'
+            xml_data += f'\t<lastmod>{date}</lastmod>\n'
+            xml_data += '\t<changefreq>Monthly</changefreq>\n'
+            xml_data += '\t<priority>0.8</priority>\n'
+            xml_data += '</url>\n'
 
-                    xml_data += '<url>\n'
-                    xml_data += f'\t<loc>{article_surl}</loc>\n'
-                    xml_data += f'\t<lastmod>{date}</lastmod>\n'
-                    xml_data += '\t<changefreq>Monthly</changefreq>\n'
-                    xml_data += '\t<priority>0.8</priority>\n'
-                    xml_data += '</url>\n'
+        xml_data += '</urlset>\n'
 
-                xml_data += '</urlset>\n'
-
-                response = Response(xml_data, mimetype='text/xml')
-                return response
-        except Exception as e:
-            print(f"An error occurred: {e}")
-        finally:
-            if db is not None:
-                db.close()
+        response = Response(xml_data, mimetype='text/xml')
+        return response
 
     @website_bp.route('/feed')
     @website_bp.route('/rss')
@@ -79,15 +58,13 @@ def create_website_blueprint(cache_instance, domain, sitename):
         xml_data += f'<lastBuildDate>{datetime.now().strftime("%a, %d %b %Y %H:%M:%S %z")}</lastBuildDate>\n'
         xml_data += f'<atom:link href="{domain}rss" rel="self" type="application/rss+xml" />\n'
 
-        for file in markdown_files:
-            encoded_article_name = urllib.parse.quote(file)
-            article_url = domain + 'blog/' + encoded_article_name
+        for title in markdown_files:
+            article_url = domain + 'blog/' + title
             article_surl = api_shortlink(article_url)
-            content, date = get_article_content(encoded_article_name, 10)
-            describe = encoded_article_name
-
+            content, date = get_article_content(title, 10)
+            describe = title
             xml_data += '<item>\n'
-            xml_data += f'\t<title>{file}</title>\n'
+            xml_data += f'\t<title>{title}</title>\n'
             xml_data += f'\t<link>{article_surl}</link>\n'
             xml_data += f'\t<guid>{article_url}</guid>\n'
             xml_data += f'\t<pubDate>{date}</pubDate>\n'

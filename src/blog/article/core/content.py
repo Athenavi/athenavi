@@ -79,29 +79,52 @@ def get_article_titles(per_page=30, page=1):
     return articles, has_next_page, has_previous_page
 
 
+import html
+
+
 def get_article_content(title, limit=10):
+    # print(f"Fetching content for: {title}")
     try:
         db = get_db_connection()
         cursor = db.cursor()
-        # 通过标题获取文章ID，然后获取完整的内容和修改时间
         query = """
                 SELECT ac.content, ac.updated_at
                 FROM articles a
                          JOIN article_content ac ON a.article_id = ac.aid
-                WHERE a.title = %s
+                WHERE a.title = %s \
                 """
         cursor.execute(query, (title,))
         result = cursor.fetchone()
         cursor.close()
         db.close()
-        if result:
-            content, date = result
-            lines = content.split('\n')
-            limited_content = '\n'.join(lines[:limit])
-            return limited_content, date
-        else:
+
+        if not result:
+            print("No article found with title:", title)
             return None, None
+
+        content, date = result
+        unescaped_content = html.unescape(content)
+
+        # 按行分割Markdown内容
+        lines = unescaped_content.splitlines()
+
+        # 处理空内容的情况
+        if not lines:
+            return "", date
+
+        # 截取指定行数并保留行结构
+        truncated_lines = lines[:limit]
+        truncated_content = "\n".join(truncated_lines)
+
+        # 添加省略号指示截断（如果实际行数超过限制）
+        if len(lines) > limit:
+            truncated_content += "\n..."
+
+        #print(f"Truncated content ({limit} lines):\n{truncated_content}")
+        return truncated_content, date
+
     except Exception as e:
+        print(f"Error fetching content: {str(e)}")
         return None, None
 
 
