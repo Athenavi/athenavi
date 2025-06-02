@@ -3,8 +3,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, request, render_template, redirect
 
-from src.blog.article.core.content import get_article_content, get_a_list
-from src.blog.article.core.crud import get_article_last_modified
+from src.blog.article.core.content import get_article_content, get_article_titles
 from src.database import get_db_connection
 from src.utils.shortener.links import create_special_url, redirect_to_long_url
 
@@ -46,7 +45,7 @@ def create_website_blueprint(cache_instance, domain, sitename):
                 for title in article_titles:
                     article_url = domain + 'blog/' + title
                     article_surl = api_shortlink(article_url)
-                    date = get_article_last_modified(title)
+                    *_, date = get_article_content(title)
 
                     xml_data += '<url>\n'
                     xml_data += f'\t<loc>{article_surl}</loc>\n'
@@ -69,7 +68,7 @@ def create_website_blueprint(cache_instance, domain, sitename):
     @website_bp.route('/rss')
     @cache_instance.memoize(7200)
     def generate_rss():
-        markdown_files = get_a_list(chanel=3, page=1)
+        markdown_files, *_ = get_article_titles()
         xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n'
         xml_data += '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
         xml_data += '<channel>\n'
@@ -84,8 +83,7 @@ def create_website_blueprint(cache_instance, domain, sitename):
             encoded_article_name = urllib.parse.quote(file)
             article_url = domain + 'blog/' + encoded_article_name
             article_surl = api_shortlink(article_url)
-            date = get_article_last_modified(encoded_article_name)
-            content, *_ = get_article_content(file, 10)
+            content, date = get_article_content(encoded_article_name, 10)
             describe = encoded_article_name
 
             xml_data += '<item>\n'

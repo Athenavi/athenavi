@@ -107,31 +107,3 @@ def fetch_articles_content(aid):
         print(f"An error occurred: {e}")
         # 更详细的日志记录或错误处理机制
         return None
-
-
-def get_article_last_modified(title):
-    try:
-        # 创建数据库连接
-        connection = get_db_connection()
-        if connection.is_connected():
-            cursor = connection.cursor(dictionary=True)
-            # 假设通过文章的ID来查找文章
-            query = "SELECT updated_at FROM articles WHERE title = %s"
-            cursor.execute(query, (title,))
-            result = cursor.fetchone()
-
-            if result and 'updated_at' in result:
-                modify_time = result['updated_at']
-                formatted_modify_time = modify_time.strftime("%Y-%m-%d %H:%M")
-                return formatted_modify_time
-            else:
-                return None
-
-    except Exception as e:
-        # 处理数据库连接或查询错误
-        print(f"发生错误: {e}")
-        return None
-    finally:
-        if connection.is_connected():
-            cursor.close()
-            connection.close()

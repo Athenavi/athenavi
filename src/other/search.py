@@ -5,7 +5,6 @@ import time
 import xml.etree.ElementTree as ElementTree
 import urllib.parse
 from src.blog.article.core.content import get_article_content
-from src.blog.article.core.crud import get_article_last_modified
 from src.utils.security.safe import clean_html_format
 
 
@@ -33,8 +32,7 @@ def search_handler(user_id, domain, global_encoding, max_cache_timestamp):
                 article_name = file[:-3]  # 移除文件扩展名 (.md)
                 encoded_article_name = urllib.parse.quote(article_name)
                 article_url = domain + 'blog/' + encoded_article_name
-                date = get_article_last_modified(encoded_article_name)
-                describe = get_article_content(article_name, 50)
+                describe, date = get_article_content(article_name, 50)
                 describe = clean_html_format(describe)
 
                 if keyword.lower() in article_name.lower() or keyword.lower() in describe.lower():

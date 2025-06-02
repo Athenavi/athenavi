@@ -13,19 +13,6 @@ from src.error import error
 from src.utils.security.safe import clean_html_format
 
 
-def get_a_list(chanel=1, page=1):
-    if chanel == 1:
-        articles, has_next_page, has_previous_page = get_article_titles(page=1, per_page=99999)
-        return articles
-    if chanel == 2:
-        articles, has_next_page, has_previous_page = get_article_titles(page=page, per_page=12)
-        return articles, has_next_page, has_previous_page
-    if chanel == 3:
-        # rss页面
-        articles, has_next_page, has_previous_page = get_article_titles(page=1, per_page=30)
-        return articles
-
-
 def delete_article(article_name, temp_folder):
     # 确保 temp_folder 是 Path 对象
     temp_folder = Path(temp_folder)
@@ -45,7 +32,7 @@ def delete_article(article_name, temp_folder):
     return True
 
 
-def get_article_titles(per_page, page=1):
+def get_article_titles(per_page=30, page=1):
     # 连接到MySQL数据库
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -92,70 +79,30 @@ def get_article_titles(per_page, page=1):
     return articles, has_next_page, has_previous_page
 
 
-def get_article_content(article, limit):
-    global code_lang
+def get_article_content(title, limit=10):
     try:
-        with codecs.open(f'articles/{article}.md', 'r', encoding='utf-8') as f:
-            content = f.read()
-
-        lines = content.split('\n')
-        lines_limit = min(limit, len(lines))
-        line_counter = 0
-        html_content = ''
-        read_nav = []
-        in_code_block = False
-        in_math_block = False
-        code_block_content = ''
-        math_content = ''
-
-        for line in lines:
-            if line_counter >= lines_limit:
-                break
-
-            if line.startswith('```'):
-                if in_code_block:
-                    in_code_block = False
-                    # code_lang = line.split('```')[1].strip()
-                    escaped_code_block_content = html.escape(code_block_content.strip())
-                    html_content += f'<div class="highlight"><pre><code class="language-{code_lang}">{escaped_code_block_content}</code></pre></div>'
-                    code_block_content = ''
-                else:
-                    in_code_block = True
-                    code_lang = line.split('```')[1].strip()
-            elif in_code_block:
-                code_block_content += line + '\n'
-            elif line.startswith('$$'):
-                if not in_math_block:
-                    in_math_block = True
-                else:
-                    in_math_block = False
-                    html_content += f'<div class="math">{math_content.strip()}</div>'
-                    math_content = ''
-            elif in_math_block:
-                math_content += line.strip() + ' '
-            else:
-                if re.search(r'^\s*<.*?>', line):
-                    # Skip HTML tags and their content in non-code block lines
-                    continue
-
-                if line.startswith('#'):
-                    header_level = len(line.split()[0]) + 2
-                    header_title = line.strip('#').strip()
-                    anchor = header_title.lower().replace(" ", "-")
-                    read_nav.append(
-                        f'<a href="#{anchor}">{header_title}</a><br>'
-                    )
-                    line = f'<h{header_level} id="{anchor}">{header_title}</h{header_level}>'
-
-                html_content += zy_show_article(line)
-
-            line_counter += 1
-
-        return html_content, '\n'.join(read_nav)
-
-    except FileNotFoundError:
-        # Return a 404 error page if the file does not exist
-        return error('No file', 404)
+        db = get_db_connection()
+        cursor = db.cursor()
+        # 通过标题获取文章ID，然后获取完整的内容和修改时间
+        query = """
+                SELECT ac.content, ac.updated_at
+                FROM articles a
+                         JOIN article_content ac ON a.article_id = ac.aid
+                WHERE a.title = %s
+                """
+        cursor.execute(query, (title,))
+        result = cursor.fetchone()
+        cursor.close()
+        db.close()
+        if result:
+            content, date = result
+            lines = content.split('\n')
+            limited_content = '\n'.join(lines[:limit])
+            return limited_content, date
+        else:
+            return None, None
+    except Exception as e:
+        return None, None
 
 
 def zy_show_article(content):
