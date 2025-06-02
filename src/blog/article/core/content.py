@@ -1,9 +1,5 @@
 import codecs
-import datetime
-import html
 import os
-import re
-import urllib
 from pathlib import Path
 
 import markdown
@@ -120,7 +116,52 @@ def get_article_content(title, limit=10):
         if len(lines) > limit:
             truncated_content += "\n..."
 
-        #print(f"Truncated content ({limit} lines):\n{truncated_content}")
+        # print(f"Truncated content ({limit} lines):\n{truncated_content}")
+        return truncated_content, date
+
+    except Exception as e:
+        print(f"Error fetching content: {str(e)}")
+        return None, None
+
+
+def get_article_content_by_id(artile_id, limit=10):
+    # print(f"Fetching content for: {title}")
+    try:
+        db = get_db_connection()
+        cursor = db.cursor()
+        query = """
+                SELECT ac.content, ac.updated_at
+                FROM article_content ac
+                WHERE ac.aid = %s \
+                """
+        cursor.execute(query, (artile_id,))
+        result = cursor.fetchone()
+        cursor.close()
+        db.close()
+
+        if not result:
+            print("No article found with article_id:", artile_id)
+            return None, None
+
+        content, date = result
+        unescaped_content = html.unescape(content)
+
+        # 按行分割Markdown内容
+        lines = unescaped_content.splitlines()
+
+        # 处理空内容的情况
+        if not lines:
+            return "", date
+
+        # 截取指定行数并保留行结构
+        truncated_lines = lines[:limit]
+        truncated_content = "\n".join(truncated_lines)
+
+        # 添加省略号指示截断（如果实际行数超过限制）
+        if len(lines) > limit:
+            truncated_content += "\n..."
+
+        # print(f"Truncated content ({limit} lines):\n{truncated_content}")
         return truncated_content, date
 
     except Exception as e:

@@ -22,7 +22,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 from src.blog.article.core.content import delete_article, save_article_changes, \
-    edit_article_content
+    get_article_content_by_id
 from src.blog.article.core.crud import get_articles_by_owner, delete_db_article, fetch_articles, \
     get_articles_recycle, get_id_by_title, fetch_articles_content
 from src.blog.article.metadata.handlers import get_article_metadata, upsert_article_metadata
@@ -1458,7 +1458,8 @@ def markdown_editor(user_id, aid):
     if auth:
         all_info = get_article_metadata(aid)
         if request.method == 'GET':
-            edit_html = edit_article_content(all_info[1], max_line=app.config['MAX_LINE'])
+            edit_html, *_ = get_article_content_by_id(aid, limit=9999)
+            print(edit_html)
             return render_template('editor.html', edit_html=edit_html, aid=aid,
                                    user_id=user_id, coverImage=f"/api/cover/{aid}.png",
                                    all_info=all_info)
