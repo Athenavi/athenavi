@@ -163,15 +163,15 @@
 <body class="bg-gray-50 min-h-screen flex flex-col">
 
 <!-- 顶部导航栏 -->
-<header class="bg-white shadow-md sticky top-0 z-50">
+<header class="bg-white/50 shadow-md sticky top-0 z-50">
     <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-        <a href="/" class="flex items-center">
+        <a href="/" class="flex items-center backdrop-filter backdrop-blur-lg">
             <div class="bg-blue-500 text-white rounded-full w-10 h-10 flex items-center justify-center mr-3">
                 <i class="fas fa-blog text-xl"></i>
             </div>
             <h1 class="text-xl font-bold text-gray-800">{{ title }}</h1>
         </a>
-        <nav>
+        <nav class="backdrop-filter backdrop-blur-lg">
             <!-- 桌面端导航 -->
             <div class="hidden md:block">
                 <ul class="flex space-x-6">
@@ -207,7 +207,7 @@
         </nav>
     </div>
     <!-- 移动端导航菜单 -->
-    <div id="mobile-menu" class="hidden md:hidden bg-white shadow-lg">
+    <div id="mobile-menu" class="hidden md:hidden bg-white/30 shadow-lg backdrop-filter backdrop-blur-lg">
         <ul class="py-2">
             <li><a href="/"
                    class="block px-6 py-3 text-gray-700 hover:bg-gray-50 transition-colors duration-200 flex items-center">
@@ -230,6 +230,7 @@
         </ul>
     </div>
 </header>
+
 
 <!-- 主内容区域 -->
 <main class="flex-grow container mx-auto px-4 py-6 max-w-4xl">
@@ -273,7 +274,7 @@
     </div>
 
     <!-- 文章内容区域 -->
-    <div id="app" class="bg-white rounded-xl shadow-lg p-6 mb-8">
+    <div id="app" class="bg-white rounded-xl shadow-lg p-6 mb-8 mt-200">
         <!-- 文章元信息 -->
         <div class="border-t border-gray-200 pt-6 mt-8 flex justify-between text-sm text-gray-500">
             <div>
