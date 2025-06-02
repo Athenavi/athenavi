@@ -1060,7 +1060,7 @@ def json_filter(value):
     if isinstance(value, dict):
         return value
     if not isinstance(value, str):
-        print(f"Unexpected type for value: {type(value)}. Expected a string.")
+        # print(f"Unexpected type for value: {type(value)}. Expected a string.")
         return None
 
     try:
@@ -1677,7 +1677,7 @@ def markdown_editor(user_id, aid):
         all_info = get_article_metadata(aid)
         if request.method == 'GET':
             edit_html, *_ = get_article_content_by_id(aid, limit=9999)
-            print(edit_html)
+            # print(edit_html)
             return render_template('editor.html', edit_html=edit_html, aid=aid,
                                    user_id=user_id, coverImage=f"/api/cover/{aid}.png",
                                    all_info=all_info)
@@ -2046,7 +2046,7 @@ def get_outer_url(file_hash):
     根据文件哈希生成外链 URL
     """
     outer_url = domain + 'shared?data=' + file_hash
-    print(outer_url)
+    # print(outer_url)
     return outer_url
 
 
