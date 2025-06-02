@@ -29,7 +29,7 @@ def upload_article(file, upload_folder, allowed_size):
 
     # 保存文件
     file.save(str(file_path))  # 确保转换为字符串
-    shutil.copy(str(file_path), str(Path('articles') / file.filename))
+    # shutil.copy(str(file_path), str(Path('articles') / file.filename))
     return None
 
 

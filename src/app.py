@@ -25,7 +25,7 @@ from src.blog.article.core.content import delete_article, save_article_changes, 
     get_article_content_by_id
 from src.blog.article.core.crud import get_articles_by_owner, delete_db_article, fetch_articles, \
     get_articles_recycle, get_id_by_title, fetch_articles_content
-from src.blog.article.metadata.handlers import get_article_metadata, upsert_article_metadata
+from src.blog.article.metadata.handlers import get_article_metadata, upsert_article_metadata, upsert_article_content
 from src.blog.article.security.password import update_article_password
 from src.blog.comment import get_comments, create_comment, delete_comment
 from src.blog.tag import update_article_tags, query_article_tags
@@ -1330,8 +1330,9 @@ def create_article(user_id):
             return jsonify({'message': error_message[0], 'upload_locked': upload_locked, 'Lock_countdown': 300}), 400
 
         file_name = os.path.splitext(file.filename)[0]
-
-        if upsert_article_metadata(file_name, user_id):
+        aid = upsert_article_metadata(file_name, user_id)
+        sav_content = upsert_article_content(aid=aid, file=file, upload_folder=app.config['TEMP_FOLDER'])
+        if aid and sav_content:
             message = f'上传成功。但请您前往编辑页面进行编辑:<a href="/edit/{file_name}" target="_blank">编辑</a>'
             app.logger.info(f"Article info successfully saved for {file_name} by user:{user_id}.")
             cache.set(f'upload_locked_{user_id}', True, timeout=300)
