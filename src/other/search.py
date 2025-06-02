@@ -4,7 +4,8 @@ from flask import request, render_template
 import time
 import xml.etree.ElementTree as ElementTree
 import urllib.parse
-from src.blog.article.core.content import get_article_last_modified, get_article_content
+from src.blog.article.core.content import get_article_content
+from src.blog.article.core.crud import get_article_last_modified
 from src.utils.security.safe import clean_html_format
 
 

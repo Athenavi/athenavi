@@ -15,16 +15,16 @@ import requests
 from PIL import Image
 from bs4 import BeautifulSoup
 from flask import Flask, render_template, redirect, request, url_for, jsonify, send_file, \
-    make_response, send_from_directory
+    make_response, Response
 from flask_caching import Cache
 from jinja2 import select_autoescape, TemplateNotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 
 from src.blog.article.core.content import delete_article, save_article_changes, \
-    edit_article_content, get_a_list, get_article_last_modified
-from src.blog.article.core.crud import get_articles_by_owner, read_hidden_articles, delete_db_article, fetch_articles, \
-    get_articles_recycle
+    edit_article_content
+from src.blog.article.core.crud import get_articles_by_owner, delete_db_article, fetch_articles, \
+    get_articles_recycle, get_id_by_title, fetch_articles_content
 from src.blog.article.metadata.handlers import get_article_metadata, upsert_article_metadata
 from src.blog.article.security.password import update_article_password
 from src.blog.comment import get_comments, create_comment, delete_comment
@@ -146,18 +146,26 @@ def search(user_id):
     return search_handler(user_id, domain, global_encoding, app.config['MAX_CACHE_TIMESTAMP'])
 
 
-@cache.memoize(180)
+@cache.memoize(30)
 @app.route('/blog/api/<article_name>.md', methods=['GET', 'POST'])
 @app.route('/api/<article_name>.md', methods=['GET', 'POST'])
 @origin_required
 def sys_out_file(article_name):
-    hidden_articles = read_hidden_articles()
-    if article_name in hidden_articles:
-        # 隐藏的文章
-        return error(message="页面不见了", status_code=404)
+    blog_id = get_id_by_title(article_name)
+    if not blog_id:
+        return create_response('###文章不可用', 30)
 
-    articles_dir = os.path.join(base_dir, 'articles')
-    return send_from_directory(articles_dir, article_name + '.md')
+    blog_content = fetch_articles_content(blog_id)
+    if not blog_content:
+        return create_response('###页面不见了！', 120)
+
+    return create_response(blog_content, 300)
+
+
+def create_response(blog_content, max_age):
+    response = Response(blog_content, mimetype='text/markdown')
+    response.headers['Cache-Control'] = f'public, max-age={max_age}'
+    return response
 
 
 @app.route('/confirm-password', methods=['GET', 'POST'])
@@ -262,26 +270,12 @@ def blog_detail(title):
 
     # 处理GET请求
     try:
-        article_names = get_a_list(chanel=1)
-        hidden_articles = read_hidden_articles()
-
-        # 处理不存在的文章标题
-        if title not in article_names:
-            return error(message="页面不见了", status_code=404)
-
         aid, article_tags = query_article_tags(title)
-
-        if title in hidden_articles:
-            return render_template('inform.html', aid=aid)
-
-        update_date = get_article_last_modified(title)
-
         response = make_response(render_template(
             'zyDetail.html',
             article_content=1,
             aid=aid,
             articleName=title,
-            blogDate=update_date,
             domain=domain,
             url_for=url_for,
             article_tags=article_tags
@@ -643,7 +637,7 @@ def article_passwd(aid):
     db = get_db_connection()
     try:
         with db.cursor() as cursor:
-            query = "SELECT `pass` FROM article_pass WHERE aid = %s"
+            query = "SELECT `pass` FROM article_content WHERE aid = %s"
             cursor.execute(query, (int(aid),))
             result = cursor.fetchone()
             if result:

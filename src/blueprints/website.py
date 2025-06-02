@@ -3,8 +3,8 @@ from datetime import datetime
 
 from flask import Blueprint, Response, request, render_template, redirect
 
-from src.blog.article.core.content import get_article_content, get_article_last_modified, get_a_list
-from src.blog.article.core.crud import read_hidden_articles
+from src.blog.article.core.content import get_article_content, get_a_list
+from src.blog.article.core.crud import get_article_last_modified
 from src.database import get_db_connection
 from src.utils.shortener.links import create_special_url, redirect_to_long_url
 
@@ -70,9 +70,6 @@ def create_website_blueprint(cache_instance, domain, sitename):
     @cache_instance.memoize(7200)
     def generate_rss():
         markdown_files = get_a_list(chanel=3, page=1)
-        hidden_articles = read_hidden_articles()
-        markdown_files = [file for file in markdown_files if file not in hidden_articles]
-
         xml_data = '<?xml version="1.0" encoding="UTF-8"?>\n'
         xml_data += '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
         xml_data += '<channel>\n'

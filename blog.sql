@@ -109,12 +109,14 @@ create table articles
             on delete set null
 );
 
-create table article_pass
+create table article_content
 (
-    aid  int        not null
+    aid        int        not null
         primary key,
-    pass varchar(4) null,
-    constraint article_pass_ibfk_1
+    pass       varchar(4) null,
+    content    text       null,
+    updated_at timestamp default CURRENT_TIMESTAMP on update CURRENT_TIMESTAMP,
+    constraint article_content_ibfk_1
         foreign key (aid) references articles (article_id)
             on delete cascade
 );

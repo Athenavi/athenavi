@@ -46,30 +46,48 @@ def delete_article(article_name, temp_folder):
 
 
 def get_article_titles(per_page, page=1):
-    articles = []
-    files = os.listdir('articles')
-    markdown_files = [file for file in files if file.endswith('.md')]
+    # 连接到MySQL数据库
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
-    # 根据修改日期对markdown_files进行逆序排序
-    markdown_files = sorted(markdown_files, key=lambda f: datetime.datetime.fromtimestamp(os.path.getmtime(os.path.join(
-        'articles', f))), reverse=True)
-
+    # 计算查询的起始和结束索引
     start_index = (page - 1) * per_page
-    end_index = start_index + per_page
 
-    for file in markdown_files[start_index:end_index]:
-        article_name = file[:-3]  # 去除文件扩展名(.md)
-        articles.append(article_name)
+    # 执行查询，获取仅公开且未隐藏的文章标题
+    query = """
+            SELECT title
+            FROM articles
+            WHERE status = 'Published'
+              AND hidden = 0
+            ORDER BY updated_at DESC
+            LIMIT %s OFFSET %s \
+            """
+    cursor.execute(query, (per_page, start_index))
+    articles = [row[0] for row in cursor.fetchall()]
 
-    # 检查每篇文章是否在hidden.txt中，并在必要时将其移除
-    # hidden_articles = read_hidden_articles()
-    # articles = [article for article in articles if article not in hidden_articles]
+    # 关闭数据库连接
+    cursor.close()
+    conn.close()
 
-    # 移除文章名称列表中以下划线开头的文章
-    articles = [article for article in articles if not article.startswith('_')]
+    # 计算是否有下一页和上一页
+    # 这里我们再次查询总的公开且未隐藏的文章数量，以确定是否有下一页和上一页
+    count_query = """
+                  SELECT COUNT(*)
+                  FROM articles
+                  WHERE status = 'Published'
+                    AND hidden = 0 \
+                  """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(count_query)
+    total_articles = cursor.fetchone()[0]
 
-    has_next_page = end_index < len(markdown_files)
+    has_next_page = (start_index + per_page) < total_articles
     has_previous_page = start_index > 0
+
+    # 关闭数据库连接
+    cursor.close()
+    conn.close()
 
     return articles, has_next_page, has_previous_page
 
@@ -169,26 +187,6 @@ def edit_article_content(article, max_line):
     except FileNotFoundError:
         # 文件不存在时返回 404 错误页面
         return error('No file', 404)
-
-
-def get_article_last_modified(file_path):
-    try:
-        decoded_name = urllib.parse.unquote(file_path)  # 对文件名进行解码处理
-        file_path = os.path.join('articles', decoded_name + '.md')
-        # 获取文件的创建时间
-        # create_time = os.path.getctime(file_path)
-        # 获取文件的修改时间
-        modify_time = os.path.getmtime(file_path)
-        # 获取文件的访问时间
-        # access_time = os.path.getatime(file_path)
-
-        formatted_modify_time = datetime.datetime.fromtimestamp(modify_time).strftime("%Y-%m-%d %H:%M")
-
-        return formatted_modify_time
-
-    except FileNotFoundError:
-        # 处理文件不存在的情况
-        return None
 
 
 def get_file_summary(a_title):
