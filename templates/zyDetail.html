@@ -403,25 +403,64 @@
     // 点赞功能
     function liked(aid) {
         const likeButton = document.querySelector('.like-button');
-        likeButton.innerHTML = `
-            <i class="fas fa-spinner animate-spin mr-3 text-xl"></i>
-            点赞中...
-        `;
-        likeButton.classList.add('cursor-not-allowed');
+        const originalContent = likeButton.innerHTML;
 
-        setTimeout(() => {
-            likeButton.innerHTML = `
+        // 显示加载状态
+        likeButton.innerHTML = `
+        <i class="fas fa-spinner animate-spin mr-3 text-xl"></i>
+        点赞中...
+    `;
+        likeButton.classList.add('cursor-not-allowed', 'opacity-75');
+        likeButton.disabled = true;
+
+        // 发送点赞请求到后端
+        fetch(`/like?aid=${aid}`, {
+            method: 'POST'
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.like_code === 'success') {
+                    // 点赞成功 - 显示成功状态
+                    likeButton.innerHTML = `
                 <i class="fas fa-check mr-3 text-xl"></i>
                 已点赞
             `;
-            likeButton.classList.remove('bg-gradient-to-r', 'from-blue-500', 'to-indigo-600', 'hover:from-blue-600', 'hover:to-indigo-700');
-            likeButton.classList.add('bg-green-500', 'cursor-default');
-            likeButton.disabled = true;
+                    likeButton.classList.remove(
+                        'bg-gradient-to-r',
+                        'from-blue-500',
+                        'to-indigo-600',
+                        'hover:from-blue-600',
+                        'hover:to-indigo-700'
+                    );
+                    likeButton.classList.add(
+                        'bg-green-500',
+                        'cursor-default',
+                        'hover:bg-green-500' // 移除悬停效果
+                    );
 
-            // 显示点赞成功通知
-            showNotification('点赞成功！感谢您的支持。');
-        }, 1000);
+                    // 显示成功通知
+                    showNotification('点赞成功！感谢您的支持。');
+                } else {
+                    // 点赞失败 - 恢复原始状态
+                    likeButton.innerHTML = originalContent;
+                    likeButton.classList.remove('cursor-not-allowed', 'opacity-75');
+                    likeButton.disabled = false;
+
+                    // 显示错误通知
+                    showNotification(`点赞失败: ${data.message || '未知错误'}`, true);
+                }
+            })
+            .catch(error => {
+                // 网络错误处理
+                console.error('点赞请求失败:', error);
+                likeButton.innerHTML = originalContent;
+                likeButton.classList.remove('cursor-not-allowed', 'opacity-75');
+                likeButton.disabled = false;
+
+                showNotification('网络错误，请稍后重试', true);
+            });
     }
+
 
     // 显示通知
     function showNotification(message) {

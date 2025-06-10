@@ -692,33 +692,6 @@ def unfollow_user(user_id):
         return jsonify({'code': 'failed', 'message': '服务器错误'})
 
 
-@app.route('/like', methods=['POST'])
-@jwt_required
-def like(user_id):
-    aid = request.args.get('aid')
-    if not aid:
-        return jsonify({'like_code': 'failed', 'message': "error"})
-    if user_id == 0:
-        return jsonify({'like_code': 'failed', 'message': "请登录后操作"})
-
-    user_liked = cache.get(f'{user_id}_liked')
-    if user_liked is None:
-        user_liked = []
-    if aid in user_liked:
-        return jsonify({'like_code': 'failed', 'message': "你已经点赞过了!!"})
-    try:
-        with get_db_connection() as db:
-            with db.cursor() as cursor:
-                query = "UPDATE `articles` SET `Likes` = `Likes` + 1 WHERE `articles`.`article_id` = %s;"
-                cursor.execute(query, (int(aid),))
-                db.commit()
-                user_liked.append(aid)
-                cache.set(f'{user_id}_liked', user_liked)
-            return jsonify({'like_code': 'success'})
-    except Exception as e:
-        return jsonify({'like_code': 'failed', 'message': str(e)})
-
-
 @app.route("/qrlogin")
 def qrlogin():
     ct = str(int(time.time()))
@@ -2091,6 +2064,34 @@ def handle_file_upload(user_id):
             "succMap": succ_map
         }
     })
+
+
+@app.route('/like', methods=['POST'])
+def like():
+    aid = request.args.get('aid')
+    if not aid:
+        return jsonify({'like_code': 'failed', 'message': "error"})
+
+    cache_key = f"aid_{aid}_likes"
+
+    # 修复：SimpleCache.get() 不接受默认值参数
+    current_likes = cache.get(cache_key)
+    if current_likes is None:
+        current_likes = 0
+
+    new_likes = current_likes + 1
+    cache.set(cache_key, new_likes, timeout=None)
+
+    if new_likes == 5:
+        try:
+            with get_db_connection() as db, db.cursor() as cursor:
+                cursor.execute("UPDATE `articles` SET `Likes` = `Likes` + 5 WHERE `article_id` = %s;", (int(aid),))
+                db.commit()
+                return jsonify({'like_code': 'success'})
+        except Exception as e:
+            return jsonify({'like_code': 'failed', 'message': str(e)})
+    else:
+        return jsonify({'like_code': 'success'})
 
 
 @app.errorhandler(404)
