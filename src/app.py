@@ -18,7 +18,6 @@ from flask import Flask, render_template, redirect, request, url_for, jsonify, s
 from flask_caching import Cache
 from jinja2 import select_autoescape, TemplateNotFound
 from werkzeug.middleware.proxy_fix import ProxyFix
-from werkzeug.utils import secure_filename
 
 from src.blog.article.core.content import delete_article, save_article_changes, \
     get_article_content_by_id
@@ -2087,6 +2086,7 @@ def like():
             with get_db_connection() as db, db.cursor() as cursor:
                 cursor.execute("UPDATE `articles` SET `Likes` = `Likes` + 5 WHERE `article_id` = %s;", (int(aid),))
                 db.commit()
+                cache.set(cache_key, 0, timeout=None)
                 return jsonify({'like_code': 'success'})
         except Exception as e:
             return jsonify({'like_code': 'failed', 'message': str(e)})
