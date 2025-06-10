@@ -1148,44 +1148,6 @@ def api_avatar_image(avatar_uuid):
     return send_file(f'{base_dir}/avatar/{avatar_uuid}.webp', mimetype='image/webp')
 
 
-def zy_save_edit(aid, content, a_name):
-    if content is None:
-        raise ValueError("Content cannot be None")
-    if a_name is None or a_name.strip() == "":
-        raise ValueError("Article name cannot be None or empty")
-
-    save_directory = 'articles/'
-
-    # 计算内容的哈希值
-    current_content_hash = hashlib.md5(content.encode(global_encoding)).hexdigest()
-
-    # 从缓存中获取之前的哈希值
-    previous_content_hash = cache.get(f"{aid}_lasted_hash")
-
-    # 检查内容是否与上一次提交相同
-    if current_content_hash == previous_content_hash:
-        return {'show_edit_code': 'success'}
-
-    # 更新缓存中的哈希值
-    cache.set(f"{aid}_lasted_hash", current_content_hash, timeout=28800)
-
-    # 将文章名转换为安全的文件名
-    filename = secure_filename(a_name) + ".md"
-
-    # 将字节字符串和目录拼接为文件路径
-    file_path = os.path.join(save_directory, filename)
-
-    # 检查保存目录是否存在，如果不存在则创建它
-    if not os.path.exists(save_directory):
-        os.makedirs(save_directory)
-
-    # 将文件保存到指定的目录上，覆盖任何已存在的文件
-    with open(file_path, 'w', encoding=global_encoding) as file:
-        file.write(content)
-
-    return {'show_edit_code': 'success'}
-
-
 @app.route('/api/edit/<int:aid>', methods=['POST', 'PUT'])
 @jwt_required
 def api_edit(user_id, aid):
@@ -1217,6 +1179,34 @@ def api_edit(user_id, aid):
     except Exception as e:
         app.logger.error(f"保存文章 article id: {aid} 时出错: {e} by user {user_id} ")
         return jsonify({'show_edit_code': 'failed'}), 500
+
+
+def zy_save_edit(aid, content, a_name):
+    if content is None:
+        raise ValueError("Content cannot be None")
+    if a_name is None or a_name.strip() == "":
+        raise ValueError("Article name cannot be None or empty")
+    current_content_hash = hashlib.md5(content.encode(global_encoding)).hexdigest()
+
+    # 从缓存中获取之前的哈希值
+    previous_content_hash = cache.get(f"{aid}_lasted_hash")
+
+    # 检查内容是否与上一次提交相同
+    if current_content_hash == previous_content_hash:
+        return True
+
+    try:
+        # 更新文章内容
+        with get_db_connection() as db:
+            with db.cursor() as cursor:
+                cursor.execute("UPDATE `article_content` SET `Content` = %s WHERE `aid` = %s", (content, aid))
+                db.commit()
+    except Exception as e:
+        app.logger.error(f"Error updating article content for article id {aid}: {e}")
+        return False
+    # 更新缓存中的哈希值
+    cache.set(f"{aid}_lasted_hash", current_content_hash, timeout=28800)
+    return True
 
 
 @app.route('/api/edit/tag/<int:aid>', methods=['PUT'])
@@ -1681,9 +1671,6 @@ def markdown_editor(user_id, aid):
             return render_template('editor.html', edit_html=edit_html, aid=aid,
                                    user_id=user_id, coverImage=f"/api/cover/{aid}.png",
                                    all_info=all_info)
-        elif request.method == 'POST':
-            content = request.json['content']
-            return zy_save_edit(aid, content, all_info[1])
         else:
             return render_template('editor.html')
 
